@@ -10,6 +10,13 @@ If you want to modify the code you will need to:
 •	Source code for the sample flask code used in this example is at – git clone https://github.com/aws-samples/aws-app-mesh-multi-cell-multi-account-service-discovery/tree/main/application-code. If you want to modify the code you do the same using AWS Cloud 9
 •	IaC code for deployment steps are depicted at - https://github.com/aws-samples/aws-app-mesh-multi-cell-multi-account-service-discovery/tree/main/cloudformation-templates
 
+## Flow Diagram:
+
+![alt text](/images/Picture1.png)
+Cross-Account Inter-microservices communication flow
+
+![alt text](/images/Picture2.png)
+Target State Architecture
 
 ## Deployment Steps:
 
