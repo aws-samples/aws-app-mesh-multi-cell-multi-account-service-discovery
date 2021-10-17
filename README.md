@@ -7,8 +7,8 @@ If you want to modify the code you will need to:
 •	create a Cloud9 Environment and push it to your image repository (Amazon ECR Private or Public or any other repo)
 
 ## Code for the demo:
-•	Source code for the sample flask code used in this example is at – git clone https://github.com/aws-samples/aws-app-mesh-multi-cell-multi-account-service-discovery/application-code. If you want to modify the code you do the same using AWS Cloud 9
-•	IaC code for deployment steps are depicted at - https://github.com/aws-samples/aws-app-mesh-multi-cell-multi-account-service-discovery/cloudformation-templates
+•	Source code for the sample flask code used in this example is at – git clone https://github.com/aws-samples/aws-app-mesh-multi-cell-multi-account-service-discovery/tree/main/application-code. If you want to modify the code you do the same using AWS Cloud 9
+•	IaC code for deployment steps are depicted at - https://github.com/aws-samples/aws-app-mesh-multi-cell-multi-account-service-discovery/tree/main/cloudformation-templates
 
 
 ## Deployment Steps:
