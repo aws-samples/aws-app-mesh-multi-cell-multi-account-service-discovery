@@ -13,9 +13,11 @@ If you want to modify the code you will need to:
 ## Flow Diagram:
 
 ![alt text](/images/Picture1.png)
+
 Cross-Account Inter-microservices communication flow
 
 ![alt text](/images/Picture2.png)
+
 Target State Architecture
 
 ## Deployment Steps:
