@@ -13,10 +13,10 @@ If you want to modify the code you will need to:
 
 ## Deployment Steps:
 
-Account and IAM user creation:
+- Account and IAM user creation:
 •	In both the AWS Accounts i.e. account 1 and account 2, create one IAM user each and get the Access key and Secret Key (here i have assumed administrator access, but you can grant least privilege CLI access for AppMesh, ECS, CloudMap, Route53 etc)
 
-Cloud9 setup and AWS Profile configuration:
+- Cloud9 setup and AWS Profile configuration:
 •	In account1, create and  Cloud9 environment (don’t assign any IAM role to this cloud9 and turn off AWS managed temporary credentials). Open a new terminal in Cloud9 and run below commands two create AWS profiles: 
 a.	aws configure --profile acct1-domain1 (pass the access key and secret key created in step 1, region as us-east-1)
 b.	aws configure --profile acct2-domain2 (pass the access key and secret key created in step 1, region as us-east-1)
@@ -25,7 +25,7 @@ Here we will use us-east-1 but you can use region of your choice. (Please note A
 •	We will clone the Infrastructure as a Code (IaC) for deployment of AWS resources via the command “git clone <<githublink>>
 Cd <<folderpath>>
 
-Setup infra – VPC, Subnets, App Mesh resources required for the demo in AWS Account 1
+- Setup infra – VPC, Subnets, App Mesh resources required for the demo in AWS Account 1
 •	export Account1AccountId=XXXXXXXXXXXX (your 12 digit AWS Account number). Post setting check echo $Account1AccountId
 •	export Account2AccountId=XXXXXXXXXXXX (your 12 digit AWS Account number). Post setting check echo $Account2AccountId
 •	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name appmesh-vpc-subnet-infra --template-file "1_infra_account_1.yaml" --capabilities CAPABILITY_IAM
@@ -33,16 +33,16 @@ This will create VPC, two public  subnets (with IGW) and two private subnets (wi
 •	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name appmesh-resources-account-1 --template-file "2_appmesh_resources.yaml" --parameter-overrides MeshOwner=$Account1AccountId --capabilities CAPABILITY_IAM
 This will create App Mesh resources like Virtual Nodes, Virtual Service for Service A and B Cell1 and Cell2 and Virtual Router for Service B
 
-Share the VPC and Mesh created in Account1 with Account2 using Resource Access Manager:
+- Share the VPC and Mesh created in Account1 with Account2 using Resource Access Manager:
 •	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name mesh-and-vpc-share --template-file "3_mesh_and_vpc_share.yaml" --parameter-overrides Account2AccountId=$Account2AccountId --capabilities CAPABILITY_IAM
 
-Create common infra components in AWS Account 1: 
+- Create common infra components in AWS Account 1: 
 •	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name common-infra-account-1 --template-file "4_common_infra_account_1.yaml" --capabilities CAPABILITY_NAMED_IAM
 This will create ECS Cluster, Cloud Map Namespace (internal-Domain1.com), CloudWatch log group, IAM Roles and Security Group
 •	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name ALB-for-Service-A --template-file "5_ALB-for-Service-A.yaml" --capabilities CAPABILITY_IAM
 This stack creates Application Load Balancer, Target Group, Listener and Rules. ALB is for Service A, Cell 1 and Cell 2 having two different Target Groups. Later in this demo we can point ALB to a Front end service using App Mesh Virtual Gateway
 
-Create Service A and B, Cell1 and Cell2 ECS Tasks and Definitions in Account 1:  		
+- Create Service A and B, Cell1 and Cell2 ECS Tasks and Definitions in Account 1:  		
 Each ECS Task definition has 3 container definitions – Application container, Envoy sidecar and Xray daemon. For now we have configured application container from dockerhub, but you can provide your own application image from Amazon ECR or any other private repository
 •	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name Domain-1-Service-B-Cell-1 --template-file "7a_Domain-1-Service-B-Cell-1.yaml" --parameter-overrides MeshOwner=$Account1AccountId --capabilities CAPABILITY_IAM
 This creates ECS Task and Service for Service-B-Cell-1 in AWS Account 1
@@ -53,15 +53,15 @@ This creates ECS Task and Service for Service-A-Cell-1 in AWS Account 1
 •	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name Domain-1-Service-A-Cell-2 --template-file "6b_Domain-1-Service-A-Cell-2.yaml" --parameter-overrides MeshOwner=$Account1AccountId --capabilities CAPABILITY_IAM
 This creates ECS Task and Service for Service-A-Cell-2 in AWS account 1
 
-Create common Infra components in AWS Account 2:
+- Create common Infra components in AWS Account 2:
 •	aws --profile acct2-domain2 cloudformation deploy --no-fail-on-empty-changeset --stack-name common-infra-account-2 --template-file "8_common_infra_account_2.yaml" --parameter-overrides MeshOwner=$Account1AccountId "VPC=$(aws --profile acct2-domain2 ec2 describe-vpcs --filters Name=owner-id,Values=$Account1AccountId --query 'Vpcs[*].VpcId' --output text)" --capabilities CAPABILITY_NAMED_IAM
 This will create ECS Cluster, CloudWatch log group, IAM Roles and Security Group
 
-Create App Mesh resources in AWS Account 2:
+- Create App Mesh resources in AWS Account 2:
 •	aws --profile acct2-domain2 cloudformation deploy --no-fail-on-empty-changeset --stack-name appmesh-resources-account-2 --template-file "9_appmesh_resources_account_2.yaml" --parameter-overrides MeshOwner=$Account1AccountId --capabilities CAPABILITY_IAM
 •	This stack creates Virtual Service, Virtual Node and Virtual Router for Service-X Cell1 and Cell2
 
-Detailed steps to create Cloud Map Namespace (internal-Domain2.com) in AWS Account 2 and associating with Shared VPC:
+- Detailed steps to create Cloud Map Namespace (internal-Domain2.com) in AWS Account 2 and associating with Shared VPC:
 a.	aws --profile acct2-domain2 ec2 describe-vpcs --filters Name=owner-id,Values=$Account2AccountId --query 'Vpcs[*].VpcId' --output text
 Basically, this checks for any existing VPC in AWS Account2 (not the shared VPC). Refer this documentation which states “When you create a private hosted zone, you must associate a VPC with the hosted zone, and the VPC that you specify must have been created by using the same account that you're using to create the hosted zone.”
 If you don’t have any VPC created in your Account2, please create one temporarily for this step using command aws --profile acct2-domain2 ec2 create-vpc --cidr-block 192.168.0.0/28 (We can remove this VPC and association later)
@@ -84,17 +84,17 @@ Provide the change id received in step f. To confirm if the status has changed t
 
 PS: If you have multiple AWS accounts(Hub-and-Spoke), you might want to create automation of these CLI commands using --filters and --query options
 
-Create Service X Cell1 and Cell2 ECS Tasks and Definitions in Account 2:
+- Create Service X Cell1 and Cell2 ECS Tasks and Definitions in Account 2:
 •	aws --profile acct2-domain2 cloudformation deploy --no-fail-on-empty-changeset --stack-name Domain-2-Service-X-Cell-1 --template-file "10a_Domain-2-Service-X-Cell-1.yaml" --parameter-overrides MeshOwner=$Account1AccountId "VPC=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='VPC'].OutputValue" --output=text)" "PrivateSubnet1=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='PrivateSubnet1'].OutputValue" --output=text)" "PrivateSubnet2=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='PrivateSubnet2'].OutputValue" --output=text)" "NameSpaceId2=$(aws --profile acct2-domain2 servicediscovery list-namespaces --query "Namespaces[?Name == 'internal-Domain2.com'].Id" --output text)" --capabilities CAPABILITY_IAM
 •	aws --profile acct2-domain2 cloudformation deploy --no-fail-on-empty-changeset --stack-name Domain-2-Service-X-Cell-2 --template-file "10b_Domain-2-Service-X-Cell-2.yaml" --parameter-overrides MeshOwner=$Account1AccountId "VPC=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='VPC'].OutputValue" --output=text)" "PrivateSubnet1=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='PrivateSubnet1'].OutputValue" --output=text)" "PrivateSubnet2=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='PrivateSubnet2'].OutputValue" --output=text)" "NameSpaceId2=$(aws --profile acct2-domain2 servicediscovery list-namespaces --query "Namespaces[?Name == 'internal-Domain2.com'].Id" --output text)" --capabilities CAPABILITY_IAM
 
-This completes the demo setup, now you can grab and ALB DNS from output of CloudFormation stack “ALB-for-Service-A” and test your functionality. Also check the AWS X-Ray Service Map by going to X-Ray in your AWS console. You can change the weights of RouterB and RouterX in App Mesh
+- This completes the demo setup, now you can grab and ALB DNS from output of CloudFormation stack “ALB-for-Service-A” and test your functionality. Also check the AWS X-Ray Service Map by going to X-Ray in your AWS console. You can change the weights of RouterB and RouterX in App Mesh
 •	aws --profile acct1-domain1 appmesh update-route --cli-input-json file://AppMesh-Router-B-config-change.json
 Before running above aommand, update the meshOwner as 12-digit AWS account number of AWS Account 1
 •	aws --profile acct2-domain2 appmesh update-route --cli-input-json file://AppMesh-Router-X-config-change.json
 Before running above command, update the meshOwner as 12-digit AWS account number of AWS Account 1
 
-Last optional step:
+- Last optional step:
 For Service A, if you want to use App Mesh Virtual Gateway instead of Application Load Balancer, we need to create a Virtual Gateway in App Mesh, then create Frond-End ECS Task (which will have only one container that is Envoy) and ECS Service which will tie to new Front-End Application Load Balancer. Then create Gateway Routes to point the external traffic as ALB to Virtual Gateway to Virtual Service to Virtual Router and finally to Virtual Node 
 
 •	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name AppMesh-Virtual-Gateway-resources --template-file "11_Virtual-Gateway-AppMesh-resources.yaml" --parameter-overrides MeshOwner=$Account1AccountId --capabilities CAPABILITY_IAM
