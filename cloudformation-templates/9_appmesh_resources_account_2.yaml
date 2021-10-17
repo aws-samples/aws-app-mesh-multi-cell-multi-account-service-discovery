@@ -1,0 +1,107 @@
+Parameters:
+  MeshName:
+    Type: String
+    Description: Name of the Mesh
+    Default: multiaccountmeshdemo
+    
+  MeshOwner:
+    Type: String
+    Description: Account id of the AppMesh owner
+
+  ProjectName:
+    Type: String
+    Description: Project name to link stacks
+    Default: app-mesh-multi-cell-multi-account
+
+Resources:
+  Domain2Cell1ServiceXNode:
+    Type: AWS::AppMesh::VirtualNode
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualNodeName: Domain-2-Cell-1-Service-X-VN
+      Spec:
+        Listeners:
+          - PortMapping:
+              Port: 5001
+              Protocol: http
+        ServiceDiscovery:
+          AWSCloudMap:
+            NamespaceName: "internal-Domain2.com"
+            ServiceName: "Domain2-ServiceX-Cell1"
+
+          
+  Domain2Cell1ServiceXService:
+    DependsOn:
+      - Domain2Cell1ServiceXNode
+    Type: AWS::AppMesh::VirtualService
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualServiceName: Domain2-ServiceX-Cell1.internal-Domain2.com
+      Spec:
+        Provider:
+          VirtualRouter:
+            VirtualRouterName: routerservicex
+
+  Domain2Cell2ServiceXNode:
+    Type: AWS::AppMesh::VirtualNode
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualNodeName: Domain-2-Cell-2-Service-X-VN
+      Spec:
+        Listeners:
+          - PortMapping:
+              Port: 5001
+              Protocol: http
+        ServiceDiscovery:
+          AWSCloudMap:
+            NamespaceName: "internal-Domain2.com"
+            ServiceName: "Domain2-ServiceX-Cell2"
+
+
+  Domain2Cell2ServiceXService:
+    DependsOn:
+      - Domain2Cell2ServiceXNode
+    Type: AWS::AppMesh::VirtualService
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualServiceName: Domain2-ServiceX-Cell2.internal-Domain2.com
+      Spec:
+        Provider:
+          VirtualRouter:
+            VirtualRouterName: routerservicex
+            
+
+  Domain2ServiceXRouter:
+    Type: AWS::AppMesh::VirtualRouter
+    Properties:
+      VirtualRouterName: routerservicex
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      Spec:
+        Listeners:
+        - PortMapping:
+            Port: 5001
+            Protocol: http
+            
+  ServiceXVirtualRoute:
+    Type: "AWS::AppMesh::Route"
+    DependsOn: Domain2ServiceXRouter
+    Properties:
+      RouteName: servicexroute
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualRouterName: routerservicex
+      Spec:
+        HttpRoute:
+          Match:
+            Prefix: "/"
+          Action:
+            WeightedTargets:
+            - VirtualNode: Domain-2-Cell-1-Service-X-VN
+              Weight: 50
+            - VirtualNode: Domain-2-Cell-2-Service-X-VN
+              Weight: 50

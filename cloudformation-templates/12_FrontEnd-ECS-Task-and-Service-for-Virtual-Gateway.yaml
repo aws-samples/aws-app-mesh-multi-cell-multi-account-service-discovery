@@ -1,0 +1,179 @@
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project name to link stacks
+    Default: app-mesh-multi-cell-multi-account  
+    
+  MeshName:
+    Type: String
+    Description: Name of the shared mesh
+    Default: multiaccountmeshdemo
+    
+  MultiCellVirtualGatewayName:
+    Type: String
+    Description: Project name to link stacks
+    Default: appmeshmulticellvirtualgateway  
+      
+Resources:
+
+  FrontEndTaskDefForVirtualGateway:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities:
+        - "FARGATE"
+      Family: "FrontEndTaskForVirtualGateway"
+      NetworkMode: "awsvpc"
+
+      Cpu: 512
+      Memory: 1024
+      TaskRoleArn: 
+        Fn::ImportValue: !Sub "${ProjectName}:TaskIamRole"       
+      ExecutionRoleArn: 
+        Fn::ImportValue: !Sub "${ProjectName}:TaskExecutionIamRole"      
+      ContainerDefinitions:
+        - Name: envoy
+          Image: "840364872350.dkr.ecr.us-east-1.amazonaws.com/aws-appmesh-envoy:v1.18.3.0-prod"
+          Essential: true
+          User: "1337"
+
+          PortMappings:
+            - ContainerPort: 5001
+              Protocol: "tcp"
+            - ContainerPort: 9901
+              Protocol: "tcp"
+
+          HealthCheck:
+            Command:
+              - "CMD-SHELL"
+              - "curl -s http://localhost:9901/server_info | grep state | grep -q LIVE"
+            Interval: 5
+            Timeout: 2
+            Retries: 3
+            StartPeriod: 60
+          Environment:
+            - Name: "APPMESH_VIRTUAL_NODE_NAME"
+              Value: !Sub "mesh/${MeshName}/virtualGateway/${MultiCellVirtualGatewayName}"
+
+  FrontEndTaskForVirtualGatwayServiceRegistry:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: "FrontEndServiceForVirtualGateway"
+      DnsConfig:
+        NamespaceId:
+          Fn::ImportValue: !Sub "${ProjectName}:ECSServiceDiscoveryNamespace"        
+        DnsRecords:
+          - Type: A
+            TTL: 30
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  FrontEndTaskForVirtualGatwayService:
+    Type: AWS::ECS::Service
+    DependsOn: 
+      - WebLoadBalancerRule
+    Properties:
+      ServiceName: "FrontEndServiceForVirtualGateway"
+      Cluster: 
+        Fn::ImportValue: !Sub "${ProjectName}:ECSCluster"
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: 2
+      LaunchType: "FARGATE"
+      ServiceRegistries:
+        - RegistryArn: !GetAtt "FrontEndTaskForVirtualGatwayServiceRegistry.Arn"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - Fn::ImportValue: !Sub "${ProjectName}:SecurityGroupId"
+          Subnets:
+            - Fn::ImportValue: !Sub "${ProjectName}:PublicSubnet1"
+            - Fn::ImportValue: !Sub "${ProjectName}:PublicSubnet2"
+      TaskDefinition: !Ref FrontEndTaskDefForVirtualGateway
+      LoadBalancers:
+        - ContainerName: envoy
+          ContainerPort: 5001
+          TargetGroupArn: !Ref AppMeshFrontEndTG      
+
+
+
+  AppMeshFrontEndALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "AppMesh-Frontend-LB-SG"
+      GroupDescription: "Access to the public facing load balancer"
+      VpcId: 
+        Fn::ImportValue: !Sub "${ProjectName}:VPC"
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+
+
+  AppMeshFrontEndLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "AppMesh-Frontend-LB"
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "30"
+      Subnets:
+        - Fn::ImportValue: !Sub "${ProjectName}:PublicSubnet1"
+        - Fn::ImportValue: !Sub "${ProjectName}:PublicSubnet2"      
+      SecurityGroups:
+        - !Ref AppMeshFrontEndALBSG
+
+  AppMeshFrontEndListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref AppMeshFrontEndTG
+          Type: "forward"
+      LoadBalancerArn: !Ref AppMeshFrontEndLB
+      Port: 80
+      Protocol: HTTP
+
+  WebLoadBalancerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref AppMeshFrontEndTG
+                Weight: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "*"
+      ListenerArn: !Ref AppMeshFrontEndListener
+      Priority: 1
+
+  AppMeshFrontEndTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckPort: 9901      
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      TargetType: ip
+      Name: "AppMesh-TG-Frontend"
+      Port: 5001
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 120
+      VpcId:
+        Fn::ImportValue: !Sub "${ProjectName}:VPC"      
+
+Outputs:
+  PublicEndpoint:
+    Description: "Public endpoint for the FrontEnd load balancer for Virtual Gateway"
+    Value: !Join ["", ["http://", !GetAtt "AppMeshFrontEndLB.DNSName"]]
+    Export:
+      Name: !Sub "${ProjectName}:AppMesh-Front-End-ALB-Endpoint-for-Virtual-Gateway"      

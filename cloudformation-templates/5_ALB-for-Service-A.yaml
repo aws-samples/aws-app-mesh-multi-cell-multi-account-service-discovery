@@ -1,0 +1,117 @@
+Parameters:
+  
+  ProjectName:
+    Type: String
+    Description: Project name to link stacks
+    Default: app-mesh-multi-cell-multi-account
+    
+Resources:
+
+  PublicLoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "SG-for-ALB-AppMesh-Demo"
+      GroupDescription: "Access to the public facing load balancer"
+      VpcId: 
+        Fn::ImportValue: !Sub "${ProjectName}:VPC"
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+
+  PublicLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "multi-account-app-mesh-alb"
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "30"
+      Subnets:
+        - Fn::ImportValue: !Sub "${ProjectName}:PublicSubnet1"
+        - Fn::ImportValue: !Sub "${ProjectName}:PublicSubnet2"
+      SecurityGroups:
+        - !Ref PublicLoadBalancerSecurityGroup
+
+  TGDomain1ServiceACell1:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      TargetType: ip
+      Name: "TG-Domain1-Cell-1-Service-A"
+      Port: 5001
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 120
+      VpcId: 
+        Fn::ImportValue: !Sub "${ProjectName}:VPC"
+      
+  TGDomain1ServiceACell2:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      TargetType: ip
+      Name: "TG-Domain1-Cell-2-Service-A"
+      Port: 5001
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 120
+      VpcId:
+        Fn::ImportValue: !Sub "${ProjectName}:VPC"
+
+  PublicLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref TGDomain1ServiceACell1
+          Type: "forward"
+      LoadBalancerArn: !Ref PublicLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  WebLoadBalancerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref TGDomain1ServiceACell1
+                Weight: 1
+              - TargetGroupArn: !Ref TGDomain1ServiceACell2
+                Weight: 1  
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "*"
+      ListenerArn: !Ref PublicLoadBalancerListener
+      Priority: 1
+
+Outputs:
+  PublicEndpoint:
+    Description: "Public endpoint for the app mesh demo load balancer"
+    Value: !Join ["", ["http://", !GetAtt "PublicLoadBalancer.DNSName"]]
+    Export:
+      Name: !Sub "${ProjectName}:AppMesh-ALB-Endpoint"
+      
+  TargetGroupOutput1:
+    Value: !Ref TGDomain1ServiceACell1
+    Export:
+      Name: !Sub "${ProjectName}:TGDomain1ServiceACell1"
+      
+  TargetGroupOutput2:
+    Value: !Ref TGDomain1ServiceACell2
+    Export:
+      Name: !Sub "${ProjectName}:TGDomain1ServiceACell2"       

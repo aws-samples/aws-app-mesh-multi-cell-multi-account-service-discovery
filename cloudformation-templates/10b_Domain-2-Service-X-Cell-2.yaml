@@ -1,0 +1,182 @@
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project name to link stacks
+    Default: app-mesh-multi-cell-multi-account   
+  
+  VPC:
+    Description: Shared VPC Id created in stack 1_infra_account_1
+    Type: String
+    
+  PrivateSubnet1:
+    Description: PrivateSubnet1 shared from account 
+    Type: String
+
+  PrivateSubnet2:
+    Description: PrivateSubnet2 shared from account 
+    Type: String
+
+  LogGroup:
+    Description: LogGroup created in common_infra stack 
+    Type: String
+    Default: "Log-Group-app-mesh-multi-cell-multi-account"
+
+  MeshOwner:
+    Type: String
+    Description: Owner of the Mesh
+    
+  MeshName:
+    Type: String
+    Description: Name of the shared mesh
+    Default: multiaccountmeshdemo
+    
+  NameSpaceId2:
+    Type: String
+    Description: Name Space Id of Domain 2 Account 2    
+  
+  EnvoyImage:
+    Type: String
+    Description: Envoy container image
+    Default: 840364872350.dkr.ecr.us-east-1.amazonaws.com/aws-appmesh-envoy:v1.18.3.0-prod
+
+  Domain2ServiceXCell2Image:
+    Type: String
+    Description: Container image for Domain2-ServiceX-cell2
+    Default: mayurbhagia/domain-2-service-x-cell-2:latest
+
+Resources:
+
+  Domain2ServiceXCell2TaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities:
+        - "FARGATE"
+      Family: "Domain2-ServiceX-Cell2"
+      NetworkMode: "awsvpc"
+      Cpu: 512
+      Memory: 1024
+      TaskRoleArn:
+        Fn::ImportValue: !Sub "${ProjectName}:TaskIamRole"       
+      ExecutionRoleArn: 
+        Fn::ImportValue: !Sub "${ProjectName}:TaskExecutionIamRole"      
+      ProxyConfiguration:
+        Type: "APPMESH"
+        ContainerName: "envoy"
+        ProxyConfigurationProperties:
+          - Name: "IgnoredUID"
+            Value: "1337"
+          - Name: "ProxyIngressPort"
+            Value: "15000"
+          - Name: "ProxyEgressPort"
+            Value: "15001"
+          - Name: "AppPorts"
+            Value: "5001"
+          - Name: "EgressIgnoredIPs"
+            Value: "169.254.170.2,169.254.169.254"
+      ContainerDefinitions:
+        - Name: "Domain2-ServiceX-Cell2"
+          Image: !Ref Domain2ServiceXCell2Image
+          Essential: true
+          DependsOn:
+            - ContainerName: 'xray-daemon'
+              Condition: 'START'
+            - ContainerName: 'envoy'
+              Condition: 'HEALTHY'
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: "Domain2-ServiceX-Cell2-Application"
+          PortMappings:
+            - ContainerPort: 5001
+              Protocol: "tcp"
+        - Name: xray-daemon
+          Image: amazon/aws-xray-daemon
+          Essential: true
+          DependsOn:
+            - ContainerName: 'envoy'
+              Condition: 'HEALTHY'          
+          User: "1337"
+          PortMappings:
+            - ContainerPort: 2000
+              Protocol: "udp"
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: "Domain2-ServiceX-Cell2-XRay"
+              
+        - Name: envoy
+          Image: !Ref EnvoyImage
+          Essential: true
+          User: "1337"
+          Ulimits:
+            - Name: "nofile"
+              HardLimit: 15000
+              SoftLimit: 15000
+          PortMappings:
+            - ContainerPort: 9901
+              Protocol: "tcp"
+            - ContainerPort: 15000
+              Protocol: "tcp"
+            - ContainerPort: 15001
+              Protocol: "tcp"
+          HealthCheck:
+            Command:
+              - "CMD-SHELL"
+              - "curl -s http://localhost:9901/server_info | grep state | grep -q LIVE"
+            Interval: 5
+            Timeout: 2
+            Retries: 3
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: "Domain2-ServiceX-Cell2-Envoy"
+          Environment:
+            - Name: "APPMESH_VIRTUAL_NODE_NAME"
+              Value: !Sub "mesh/${MeshName}@${MeshOwner}/virtualNode/Domain-2-Cell-2-Service-X-VN"
+            - Name: "ENVOY_LOG_LEVEL"
+              Value: "debug"
+            - Name: "ENABLE_ENVOY_XRAY_TRACING"
+              Value: "1"
+
+
+  Domain2ServiceXCell2Registry:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: "Domain2-ServiceX-Cell2"
+      DnsConfig:
+        NamespaceId: !Ref NameSpaceId2
+        DnsRecords:
+          - Type: A
+            TTL: 30
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  Domain2ServiceXCell2ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: Domain2ServiceXCell2Registry
+    Properties:
+      Cluster: 
+        Fn::ImportValue: !Sub "${ProjectName}:ECSCluster"
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: 2
+      LaunchType: "FARGATE"
+      ServiceRegistries:
+        - RegistryArn: !GetAtt "Domain2ServiceXCell2Registry.Arn"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - Fn::ImportValue: !Sub "${ProjectName}:SecurityGroupId"
+          Subnets:
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2
+      TaskDefinition: !Ref Domain2ServiceXCell2TaskDef
+

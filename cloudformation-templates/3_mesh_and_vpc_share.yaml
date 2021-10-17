@@ -1,0 +1,50 @@
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project name
+    Default: app-mesh-multi-cell-multi-account
+
+  Account2AccountId:
+    Type: String
+    Description: Account ID of 2nd account to share resources VPC and Mesh with
+
+  MeshName:
+    Type: String
+    Description: Name of the Mesh
+    Default: multiaccountmeshdemo
+
+Resources:
+  MeshShare:
+    Type: AWS::RAM::ResourceShare
+    Properties:
+      AllowExternalPrincipals: true
+      Name: mesh-share
+      Principals:
+        - !Ref Account2AccountId
+      ResourceArns:
+        - !Sub "arn:aws:appmesh:${AWS::Region}:${AWS::AccountId}:mesh/${MeshName}"
+
+  SubnetResourceShare:
+    Type: AWS::RAM::ResourceShare
+    Properties:
+      AllowExternalPrincipals: true
+      Name: vpc-share
+      Principals:
+        - !Ref Account2AccountId
+      ResourceArns:
+        - Fn::Join:
+            - "/"
+            - - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet"
+              - Fn::ImportValue: !Sub "${ProjectName}:PrivateSubnet1"
+        - Fn::Join:
+            - "/"
+            - - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet"
+              - Fn::ImportValue: !Sub "${ProjectName}:PrivateSubnet2"
+        - Fn::Join:
+            - "/"
+            - - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet"
+              - Fn::ImportValue: !Sub "${ProjectName}:PublicSubnet1"
+        - Fn::Join:
+            - "/"
+            - - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet"
+              - Fn::ImportValue: !Sub "${ProjectName}:PublicSubnet2"

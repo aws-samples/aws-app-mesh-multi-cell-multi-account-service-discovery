@@ -1,0 +1,25 @@
+{
+    "meshName": "multiaccountmeshdemo",
+    "meshOwner": "<your-12-digit-AWS-account-number>>",
+    "routeName": "servicebroute",
+    "spec": {
+        "httpRoute": {
+            "action": {
+                "weightedTargets": [
+                    {
+                        "virtualNode": "Domain-1-Cell-1-Service-B-VN", 
+                        "weight": 0
+                    },
+                    {
+                        "virtualNode": "Domain-1-Cell-2-Service-B-VN",
+                        "weight": 100
+                    }
+                ]
+            },
+            "match": {
+                "prefix": "/"
+            }
+        }
+    },
+    "virtualRouterName": "routerserviceb"
+}

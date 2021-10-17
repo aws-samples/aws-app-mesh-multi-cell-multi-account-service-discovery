@@ -1,0 +1,205 @@
+Parameters:
+  MeshName:
+    Type: String
+    Description: Name of the Mesh
+    Default: multiaccountmeshdemo
+    
+  MeshOwner:
+    Type: String
+    Description: Account id of the AppMesh owner
+
+  ProjectName:
+    Type: String
+    Description: Project name to link stacks
+    Default: app-mesh-multi-cell-multi-account
+
+Resources:
+
+  MultiCellMesh:
+    Type: AWS::AppMesh::Mesh
+    Properties: 
+      MeshName: !Ref MeshName
+      Spec: 
+        EgressFilter:
+          Type: ALLOW_ALL
+
+  Domain1Cell1ServiceANode:
+    Type: AWS::AppMesh::VirtualNode
+    DependsOn:
+      - MultiCellMesh    
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualNodeName: Domain-1-Cell-1-Service-A-VN
+      Spec:
+        Listeners:
+          - PortMapping:
+              Port: 5001
+              Protocol: http
+        ServiceDiscovery:
+          AWSCloudMap:
+            NamespaceName: "internal-Domain1.com"
+            ServiceName: "Domain1-ServiceA-Cell1"
+        Backends:
+          - VirtualService:
+              VirtualServiceName: "Domain1-ServiceB-Cell1.internal-Domain1.com"
+          - VirtualService:
+              VirtualServiceName: "Domain1-ServiceB-Cell2.internal-Domain1.com"        
+
+  Domain1Cell1ServiceAService:
+    DependsOn:
+      - Domain1Cell1ServiceANode
+    Type: AWS::AppMesh::VirtualService
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualServiceName: Domain1-ServiceA-Cell1.internal-Domain1.com
+      Spec:
+        Provider:
+          VirtualNode:
+            VirtualNodeName: Domain-1-Cell-1-Service-A-VN
+
+  Domain1Cell2ServiceANode:
+    Type: AWS::AppMesh::VirtualNode
+    DependsOn:
+      - MultiCellMesh    
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualNodeName: Domain-1-Cell-2-Service-A-VN
+      Spec:
+        Listeners:
+          - PortMapping:
+              Port: 5001
+              Protocol: http
+        ServiceDiscovery:
+          AWSCloudMap:
+            NamespaceName: "internal-Domain1.com"
+            ServiceName: "Domain1-ServiceA-Cell2"
+        Backends:
+          - VirtualService:
+              VirtualServiceName: "Domain1-ServiceB-Cell1.internal-Domain1.com"
+          - VirtualService:
+              VirtualServiceName: "Domain1-ServiceB-Cell2.internal-Domain1.com"              
+
+  Domain1Cell2ServiceAService:
+    DependsOn:
+      - Domain1Cell2ServiceANode
+    Type: AWS::AppMesh::VirtualService
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualServiceName: Domain1-ServiceA-Cell2.internal-Domain1.com
+      Spec:
+        Provider:
+          VirtualNode:
+            VirtualNodeName: Domain-1-Cell-2-Service-A-VN
+
+  Domain1Cell1ServiceBNode:
+    Type: AWS::AppMesh::VirtualNode
+    DependsOn:
+      - MultiCellMesh    
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner      
+      VirtualNodeName: Domain-1-Cell-1-Service-B-VN
+      Spec:
+        Listeners:
+          - PortMapping:
+              Port: 5001
+              Protocol: http
+        ServiceDiscovery:
+          AWSCloudMap:
+            NamespaceName: "internal-Domain1.com"
+            ServiceName: "Domain1-ServiceB-Cell1"
+        Backends:
+          - VirtualService:
+              VirtualServiceName: "Domain2-ServiceX-Cell1.internal-Domain2.com"
+          - VirtualService:
+              VirtualServiceName: "Domain2-ServiceX-Cell2.internal-Domain2.com"
+
+  Domain1Cell1ServiceBService:
+    DependsOn:
+      - Domain1Cell1ServiceBNode
+      - Domain1ServiceBRouter
+    Type: AWS::AppMesh::VirtualService
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualServiceName: Domain1-ServiceB-Cell1.internal-Domain1.com
+      Spec:
+        Provider:
+          VirtualRouter:
+            VirtualRouterName: routerserviceb
+
+  Domain1Cell2ServiceBNode:
+    Type: AWS::AppMesh::VirtualNode
+    DependsOn:
+      - MultiCellMesh    
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualNodeName: Domain-1-Cell-2-Service-B-VN
+      Spec:
+        Listeners:
+          - PortMapping:
+              Port: 5001
+              Protocol: http
+        ServiceDiscovery:
+          AWSCloudMap:
+            NamespaceName: "internal-Domain1.com"
+            ServiceName: "Domain1-ServiceB-Cell2"
+        Backends:
+          - VirtualService:
+              VirtualServiceName: "Domain2-ServiceX-Cell1.internal-Domain2.com"
+          - VirtualService:
+              VirtualServiceName: "Domain2-ServiceX-Cell2.internal-Domain2.com"
+              
+  Domain1Cell2ServiceBService:
+    DependsOn:
+      - Domain1Cell2ServiceBNode
+      - Domain1ServiceBRouter
+    Type: AWS::AppMesh::VirtualService
+    Properties:
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      VirtualServiceName: Domain1-ServiceB-Cell2.internal-Domain1.com
+      Spec:
+        Provider:
+          VirtualRouter:
+            VirtualRouterName: routerserviceb
+            
+      
+
+  Domain1ServiceBRouter:
+    Type: AWS::AppMesh::VirtualRouter
+    DependsOn:
+      - MultiCellMesh     
+    Properties:
+      VirtualRouterName: routerserviceb
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      Spec:
+        Listeners:
+        - PortMapping:
+            Port: 5001
+            Protocol: http
+            
+  ServiceBVirtualRoute:
+    Type: "AWS::AppMesh::Route"
+    DependsOn: Domain1ServiceBRouter
+    Properties:
+      RouteName: servicebroute
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner      
+      VirtualRouterName: routerserviceb
+      Spec:
+        HttpRoute:
+          Match:
+            Prefix: "/"
+          Action:
+            WeightedTargets:
+            - VirtualNode: Domain-1-Cell-1-Service-B-VN
+              Weight: 50
+            - VirtualNode: Domain-1-Cell-2-Service-B-VN
+              Weight: 50

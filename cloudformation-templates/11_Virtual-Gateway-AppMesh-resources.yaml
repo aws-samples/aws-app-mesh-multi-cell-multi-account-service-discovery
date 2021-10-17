@@ -1,0 +1,113 @@
+Parameters:
+  MultiCellVirtualGatewayName:
+    Type: String
+    Description: Project name to link stacks
+    Default: appmeshmulticellvirtualgateway
+    
+  MeshName:
+    Type: String
+    Description: Name of the shared mesh
+    Default: multiaccountmeshdemo
+
+  MeshOwner:
+    Type: String
+    Description: Account id of the AppMesh owner    
+      
+Resources:
+
+  MyVirtualGateway:
+    Type: AWS::AppMesh::VirtualGateway
+    Properties: 
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      Spec:
+        Listeners:
+          - PortMapping:
+              Port: 5001
+              Protocol: http
+      VirtualGatewayName: !Ref MultiCellVirtualGatewayName
+    
+  Domain1ServiceARouter:
+    Type: AWS::AppMesh::VirtualRouter
+    Properties:
+      VirtualRouterName: routerservicea
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      Spec:
+        Listeners:
+        - PortMapping:
+            Port: 5001
+            Protocol: http
+            
+  ServiceAVirtualRoute:
+    Type: "AWS::AppMesh::Route"
+    DependsOn: Domain1ServiceARouter
+    Properties:
+      RouteName: servicearoute
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner      
+      VirtualRouterName: routerservicea
+      Spec:
+        HttpRoute:
+          Match:
+            Prefix: "/"
+          Action:
+            WeightedTargets:
+            - VirtualNode: Domain-1-Cell-1-Service-A-VN
+              Weight: 50
+            - VirtualNode: Domain-1-Cell-2-Service-A-VN
+              Weight: 50    
+
+  VirtualGatewayRouteServiceA:
+    Type: AWS::AppMesh::GatewayRoute
+    DependsOn:
+      - MyVirtualGateway
+    Properties: 
+      GatewayRouteName: virtualgatewayrouteservicea
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      Spec:
+        HttpRoute:
+          Action:
+            Target:
+              VirtualService:
+                VirtualServiceName: "Domain1-ServiceA-Cell1.internal-Domain1.com"
+          Match:
+            Prefix: "/servicea"
+      VirtualGatewayName: !Ref MultiCellVirtualGatewayName
+
+  VirtualGatewayRouteServiceB:
+    Type: AWS::AppMesh::GatewayRoute
+    DependsOn:
+      - MyVirtualGateway
+    Properties: 
+      GatewayRouteName: virtualgatewayrouteserviceb
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      Spec:
+        HttpRoute:
+          Action:
+            Target:
+              VirtualService:
+                VirtualServiceName: "Domain1-ServiceB-Cell1.internal-Domain1.com"
+          Match:
+            Prefix: "/serviceb"
+      VirtualGatewayName: !Ref MultiCellVirtualGatewayName
+      
+  VirtualGatewayRouteServiceX:
+    Type: AWS::AppMesh::GatewayRoute
+    DependsOn:
+      - MyVirtualGateway
+    Properties: 
+      GatewayRouteName: virtualgatewayrouteservicex
+      MeshName: !Ref MeshName
+      MeshOwner: !Ref MeshOwner
+      Spec:
+        HttpRoute:
+          Action:
+            Target:
+              VirtualService:
+                VirtualServiceName: "Domain2-ServiceX-Cell1.internal-Domain2.com"
+          Match:
+            Prefix: "/servicex"
+      VirtualGatewayName: !Ref MultiCellVirtualGatewayName      

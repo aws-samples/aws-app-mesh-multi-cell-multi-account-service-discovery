@@ -1,0 +1,135 @@
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project name to link stacks
+    Default: app-mesh-multi-cell-multi-account 
+
+Resources:
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: Domain1Account1ECSCluster
+    
+
+  ECSServiceDiscoveryNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: "internal-Domain1.com"
+      Vpc: 
+        Fn::ImportValue: !Sub "${ProjectName}:VPC"      
+
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "SG-app-mesh-multi-cell-multi-account"
+      GroupDescription: "Security group for the instances"
+      VpcId:
+        Fn::ImportValue: !Sub "${ProjectName}:VPC"
+      SecurityGroupIngress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: -1
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: "Log-Group-app-mesh-multi-cell-multi-account"
+      RetentionInDays: 1
+      
+  TaskIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "TaskIamRole-app-mesh-multi-cell-multi-account"
+      Path: /
+      AssumeRolePolicyDocument: |
+        {
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": { "Service": [ "ecs-tasks.amazonaws.com" ]},
+            "Action": [ "sts:AssumeRole" ]
+          }]
+        }
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+                  - 'elasticloadbalancing:RegisterTargets'
+                  - 'ec2:Describe*'
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                Resource: '*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+        - arn:aws:iam::aws:policy/AWSAppMeshEnvoyAccess
+        - arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess
+
+  TaskExecutionIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "TaskExecutionIamRole-app-mesh-multi-cell-multi-account"    
+      Path: /
+      AssumeRolePolicyDocument: |
+        {
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": { "Service": [ "ecs-tasks.amazonaws.com" ]},
+            "Action": [ "sts:AssumeRole" ]
+          }]
+        }
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+                  - 'elasticloadbalancing:RegisterTargets'
+                  - 'ec2:Describe*'
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                Resource: '*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess
+
+Outputs:
+    
+  TaskIamRoleOutput:
+    Description: ARN for TaskIamRole
+    Value: !GetAtt TaskIamRole.Arn
+    Export:
+      Name: !Sub "${ProjectName}:TaskIamRole"       
+      
+  TaskExecutionIamRoleOutput:
+    Description: ARN for TaskExecutionIamRole
+    Value: !GetAtt TaskExecutionIamRole.Arn
+    Export:
+      Name: !Sub "${ProjectName}:TaskExecutionIamRole"
+
+  SecurityGroupIdOutput:
+    Description: Id for SecurityGroup
+    Value: !GetAtt SecurityGroup.GroupId
+    Export:
+      Name: !Sub "${ProjectName}:SecurityGroupId"
+      
+  ECSCluster:
+    Description: A reference to the ECS cluster
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub "${ProjectName}:ECSCluster"
+
+  ECSServiceDiscoveryNamespace:
+    Description: A SDS namespace that will be used by all services in this cluster
+    Value: !Ref ECSServiceDiscoveryNamespace
+    Export:
+      Name: !Sub "${ProjectName}:ECSServiceDiscoveryNamespace"      
