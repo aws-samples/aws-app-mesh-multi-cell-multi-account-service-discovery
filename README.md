@@ -74,26 +74,34 @@ This will create ECS Cluster, CloudWatch log group, IAM Roles and Security Group
 a.	aws --profile acct2-domain2 ec2 describe-vpcs --filters Name=owner-id,Values=$Account2AccountId --query 'Vpcs[*].VpcId' --output text \
 
 Basically, this checks for any existing VPC in AWS Account2 (not the shared VPC). Refer this documentation which states “When you create a private hosted zone, you must associate a VPC with the hosted zone, and the VPC that you specify must have been created by using the same account that you're using to create the hosted zone.” \
-If you don’t have any VPC created in your Account2, please create one temporarily for this step using command aws --profile acct2-domain2 ec2 create-vpc --cidr-block 192.168.0.0/28 (We can remove this VPC and association later) \
+If you don’t have any VPC created in your Account2, please create one temporarily for this step using command aws --profile acct2-domain2 ec2 create-vpc --cidr-block 192.168.0.0/28 (We can remove this VPC and association later)
+
 b.	aws --profile acct2-domain2 servicediscovery create-private-dns-namespace --name internal-Domain2.com --vpc <<vpc-id-from-step-a>>
 To track the creation of private DNS namespace please use the command: \
 aws --profile acct2-domain2 servicediscovery get-operation --operation-id <<operationid-received-in-above-step>> (here the status should to SUCCESS) \
-This will create the private-dns-namespace in CloudMap+Route53, but we have not yet associated this private DNS with Shared VPC id. We will perform below steps to associate this DNS with shared VPC \
+This will create the private-dns-namespace in CloudMap+Route53, but we have not yet associated this private DNS with Shared VPC id. We will perform below steps to associate this DNS with shared VPC
+  
 c.	aws --profile acct2-domain2 servicediscovery list-namespaces --query "Namespaces[?Name == 'internal-Domain2.com'].Properties.DnsProperties.HostedZoneId" --output text \
-This step gives us the Route53 Hosted Zone Id \
+This step gives us the Route53 Hosted Zone Id
+  
 d.	aws --profile acct2-domain2 ec2 describe-vpcs --filters Name=owner-id,Values=$Account1AccountId --query 'Vpcs[*].VpcId' --output text
-This step gives us the VPC Id of the Shared VPC (we are checking where owner is account 1) \
+This step gives us the VPC Id of the Shared VPC (we are checking where owner is account 1)
+  
 e.	aws route53 create-vpc-association-authorization --hosted-zone-id <<as-per-step-c>> --vpc VPCRegion=<<your-AWS-region>>,VPCId=<<as-per-step-d>> --region <<your-AWS-region>> --profile acct2-domain2 \
-Here please replace the AWS region you are working in. This step i.e. “create-vpc-association-authorization” creates request to associate the hosted zone created for namespace “internal-Domain2.com” in AWS Account 2 with Shared VPC created in AWS Account 1 (if you see we are using profile as account2). \
+Here please replace the AWS region you are working in. This step i.e. “create-vpc-association-authorization” creates request to associate the hosted zone created for namespace “internal-Domain2.com” in AWS Account 2 with Shared VPC created in AWS Account 1 (if you see we are using profile as account2).
+  
 f.	aws route53 associate-vpc-with-hosted-zone --hosted-zone-id <<as-per-step-c>> --vpc VPCRegion=<<your-AWS-region>>,VPCId=<<as-per-step-d>> --region <<your-AWS-region>> --profile acct1-domain1 \
 This is approval from user in account1 to approve the association. Here again, please replace the AWS region you are working in. This step i.e. “associate-vpc-with-hosted-zone” uses profile as account 1 which means we are approving the authorization created in above step i.e. authorizing the hosted zone/namespace created in account 2 to be associated with VPC in account 1. \
-Above command returns Change Id and the initial status is “Pending”. \
+Above command returns Change Id and the initial status is “Pending”.
+  
 g.	aws --profile acct2-domain2 route53 get-change --id "/change/CXXXXXXXXXX" --region <<your-AWS-region>> \
 Provide the change id received in step f. To confirm if the status has changed to desired state i.e. “INSYNC” (profile should be account 2) \
-\
+
+  
 
 PS: If you have multiple AWS accounts(Hub-and-Spoke), you might want to create automation of these CLI commands using --filters and --query options \
 
+  
 - Create Service X Cell1 and Cell2 ECS Tasks and Definitions in Account 2: \
 •	aws --profile acct2-domain2 cloudformation deploy --no-fail-on-empty-changeset --stack-name Domain-2-Service-X-Cell-1 --template-file "10a_Domain-2-Service-X-Cell-1.yaml" --parameter-overrides MeshOwner=$Account1AccountId "VPC=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='VPC'].OutputValue" --output=text)" "PrivateSubnet1=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='PrivateSubnet1'].OutputValue" --output=text)" "PrivateSubnet2=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='PrivateSubnet2'].OutputValue" --output=text)" "NameSpaceId2=$(aws --profile acct2-domain2 servicediscovery list-namespaces --query "Namespaces[?Name == 'internal-Domain2.com'].Id" --output text)" --capabilities CAPABILITY_IAM \
 •	aws --profile acct2-domain2 cloudformation deploy --no-fail-on-empty-changeset --stack-name Domain-2-Service-X-Cell-2 --template-file "10b_Domain-2-Service-X-Cell-2.yaml" --parameter-overrides MeshOwner=$Account1AccountId "VPC=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='VPC'].OutputValue" --output=text)" "PrivateSubnet1=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='PrivateSubnet1'].OutputValue" --output=text)" "PrivateSubnet2=$(aws --profile acct1-domain1 cloudformation describe-stacks --stack-name=appmesh-vpc-subnet-infra --query="Stacks[0].Outputs[?OutputKey=='PrivateSubnet2'].OutputValue" --output=text)" "NameSpaceId2=$(aws --profile acct2-domain2 servicediscovery list-namespaces --query "Namespaces[?Name == 'internal-Domain2.com'].Id" --output text)" --capabilities CAPABILITY_IAM \
