@@ -25,22 +25,22 @@ Target State Architecture
 - Account and IAM user creation:
 •	In both the AWS Accounts i.e. account 1 and account 2, create one IAM user each and get the Access key and Secret Key (here i have assumed administrator access, but you can grant least privilege CLI access for AppMesh, ECS, CloudMap, Route53 etc)
 
-- Cloud9 setup and AWS Profile configuration:
+- Cloud9 setup and AWS Profile configuration: \
 •	In account1, create and  Cloud9 environment (don’t assign any IAM role to this cloud9 and turn off AWS managed temporary credentials). Open a new terminal in Cloud9 and run below commands two create AWS profiles: \
   a.	aws configure --profile acct1-domain1 (pass the access key and secret key created in step 1, region as us-east-1) \
   b.	aws configure --profile acct2-domain2 (pass the access key and secret key created in step 1, region as us-east-1) \
   Here we will use us-east-1 but you can use region of your choice. (Please note AppMesh is a regional construct and cannot span regions) \
-  •	Optional Step - If you want to refer the source code of the docker images that we will use for this demo, you can refer  Github link - <<github link for   sourcecode>> \
-  •	We will clone the Infrastructure as a Code (IaC) for deployment of AWS resources via the command “git clone <<githublink>>
-  Cd <<folderpath>> \
-
-- Setup infra – VPC, Subnets, App Mesh resources required for the demo in AWS Account 1
-•	export Account1AccountId=XXXXXXXXXXXX (your 12 digit AWS Account number). Post setting check echo $Account1AccountId
-•	export Account2AccountId=XXXXXXXXXXXX (your 12 digit AWS Account number). Post setting check echo $Account2AccountId
-•	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name appmesh-vpc-subnet-infra --template-file "1_infra_account_1.yaml" --capabilities CAPABILITY_IAM
-This will create VPC, two public  subnets (with IGW) and two private subnets (with NAT Gateway). Please update the CIDR as per your networking requirements
-•	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name appmesh-resources-account-1 --template-file "2_appmesh_resources.yaml" --parameter-overrides MeshOwner=$Account1AccountId --capabilities CAPABILITY_IAM
-This will create App Mesh resources like Virtual Nodes, Virtual Service for Service A and B Cell1 and Cell2 and Virtual Router for Service B
+  •	Optional Step - If you want to refer the source code of the docker images that we will use for this demo, you can refer  Github link - https://github.com/aws-samples/aws-app-mesh-multi-cell-multi-account-service-discovery/tree/main/application-code \
+  \
+  •	We will clone the Infrastructure as a Code (IaC) for deployment of AWS resources via the command “git clone https://github.com/aws-samples/aws-app-mesh-multi-cell-multi-account-service-discovery/tree/main/cloudformation-templates \
+  
+- Setup infra – VPC, Subnets, App Mesh resources required for the demo in AWS Account 1 \
+•	export Account1AccountId=XXXXXXXXXXXX (your 12 digit AWS Account number). Post setting check echo $Account1AccountId \
+•	export Account2AccountId=XXXXXXXXXXXX (your 12 digit AWS Account number). Post setting check echo $Account2AccountId \
+•	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name appmesh-vpc-subnet-infra --template-file "1_infra_account_1.yaml" --capabilities CAPABILITY_IAM \
+This will create VPC, two public  subnets (with IGW) and two private subnets (with NAT Gateway). Please update the CIDR as per your networking requirements \
+•	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name appmesh-resources-account-1 --template-file "2_appmesh_resources.yaml" --parameter-overrides MeshOwner=$Account1AccountId --capabilities CAPABILITY_IAM \
+This will create App Mesh resources like Virtual Nodes, Virtual Service for Service A and B Cell1 and Cell2 and Virtual Router for Service B \
 
 - Share the VPC and Mesh created in Account1 with Account2 using Resource Access Manager:
 •	aws --profile acct1-domain1 cloudformation deploy --no-fail-on-empty-changeset --stack-name mesh-and-vpc-share --template-file "3_mesh_and_vpc_share.yaml" --parameter-overrides Account2AccountId=$Account2AccountId --capabilities CAPABILITY_IAM
