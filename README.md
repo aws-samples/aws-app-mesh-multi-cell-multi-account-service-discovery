@@ -70,7 +70,8 @@ This will create ECS Cluster, CloudWatch log group, IAM Roles and Security Group
 •	aws --profile acct2-domain2 cloudformation deploy --no-fail-on-empty-changeset --stack-name appmesh-resources-account-2 --template-file "9_appmesh_resources_account_2.yaml" --parameter-overrides MeshOwner=$Account1AccountId --capabilities CAPABILITY_IAM \
 •	This stack creates Virtual Service, Virtual Node and Virtual Router for Service-X Cell1 and Cell2
 
-- Detailed steps to create Cloud Map Namespace (internal-Domain2.com) in AWS Account 2 and associating with Shared VPC: \
+- Detailed steps to create Cloud Map Namespace (internal-Domain2.com) in AWS Account 2 and associating with Shared VPC:
+
 a.	aws --profile acct2-domain2 ec2 describe-vpcs --filters Name=owner-id,Values=$Account2AccountId --query 'Vpcs[*].VpcId' --output text \
 
 Basically, this checks for any existing VPC in AWS Account2 (not the shared VPC). Refer this documentation which states “When you create a private hosted zone, you must associate a VPC with the hosted zone, and the VPC that you specify must have been created by using the same account that you're using to create the hosted zone.” \
